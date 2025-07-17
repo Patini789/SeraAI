@@ -24,6 +24,11 @@ class Settings:
         self.current_model = os.getenv("CURRENT_MODEL")
         self.prompter_route = base / "packages" / "models"
 
+        self.voice_active = os.getenv("VOICE_ACTIVE", "true").lower() == "true"
+        self.voice = os.getenv("VOICE")
+        self.rate = os.getenv("RATE")
+        self.pitch = os.getenv("PITCH")
+
         notify_json = base / "env" / "notify.json"
         if notify_json.exists():
             with open(notify_json, "r", encoding="utf-8") as f:

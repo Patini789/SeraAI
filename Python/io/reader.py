@@ -56,10 +56,9 @@ class Reader:
             updated = False
 
             for item in data:
-                user = item.get("User", "")
-                message = item.get("Message", "")
+                message = item.get("User", "")
 
-                if user != "":
+                if message != "":
                     self._log("Sending conversation...")
                     self._log(item)
                     item["User"] = ""  # Todo Make the user custom, can be in godot or check for users in message

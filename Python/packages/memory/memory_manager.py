@@ -1,9 +1,3 @@
-"""MemoryManager class
-bulk_add
-filter_by_tag
-delete_memory(id)
-
-"""
 import json
 import os
 import numpy as np
@@ -11,25 +5,57 @@ import pandas as pd
 from datetime import datetime, timezone
 
 class MemoryManager:
-    def __init__(self, json_path, api_client, embedding_dim = 348):
+    def __init__(self, json_path, api_client, embedding_dim=None):
+        """
+        - json_path: file path for storing memories
+        - api_client: client used for generating embeddings
+        - embedding_dim: optional; if None, inferred from existing memories or API default
+        """
         self.api_client = api_client
         self.json_path = json_path
-        self.embedding_dim = embedding_dim
-        self.memories = [] #List of: id, text, tags, timestamp, embedding
+        self.memories = []  # List of dicts: id, text, tags, timestamp, embedding
         self._load_memories()
 
+        # Infer embedding dimension if not provided
+        if embedding_dim is None:
+            if self.memories:
+                self.embedding_dim = len(self.memories[0]["embedding"])
+            else:
+                self.embedding_dim = getattr(api_client, 'embedding_dim', 768)
+        else:
+            self.embedding_dim = embedding_dim
+
+        # Validate and adjust loaded embeddings if needed
+        for mem in self.memories:
+            emb = mem["embedding"]
+            dim = emb.shape[0]
+            if dim != self.embedding_dim:
+                print(f"🧨 Invalid embedding in {mem['id']}: dim {dim}, adjusting to {self.embedding_dim}")
+                if dim > self.embedding_dim:
+                    mem["embedding"] = emb[:self.embedding_dim]
+                else:
+                    pad = np.zeros(self.embedding_dim - dim, dtype=np.float32)
+                    mem["embedding"] = np.concatenate([emb, pad])
 
     def _load_memories(self):
         if os.path.exists(self.json_path):
             try:
                 with open(self.json_path, 'r', encoding="utf-8") as f:
-                    self.memories = json.load(f)
-                for mem in self.memories:
-                    mem["embedding"] = np.array(mem["embedding"], dtype=np.float32)
+                    data = json.load(f)
+                for mem in data:
+                    arr = np.array(mem.get("embedding", []), dtype=np.float32)
+                    self.memories.append({
+                        "id": mem.get("id"),
+                        "text": mem.get("text"),
+                        "tags": mem.get("tags", []),
+                        "timestamp": mem.get("timestamp"),
+                        "embedding": arr
+                    })
             except Exception as e:
                 print(e)
                 self.memories = []
         else:
+            os.makedirs(os.path.dirname(self.json_path), exist_ok=True)
             with open(self.json_path, 'w', encoding="utf-8") as f:
                 json.dump([], f)
 
@@ -41,7 +67,6 @@ class MemoryManager:
                 "text": mem["text"],
                 "tags": mem["tags"],
                 "timestamp": mem["timestamp"],
-                # Save as list
                 "embedding": mem["embedding"].tolist()
             })
         with open(self.json_path, 'w', encoding="utf-8") as f:
@@ -50,66 +75,68 @@ class MemoryManager:
     def add_memory(self, text, tags=None, timestamp=None, embedding=None):
         """
         Add a new memory.
-        - text: the content to store.
-        - tags: list of strings for simple tag-based filtering.
-        - timestamp: ISO format string; if None, current UTC time is used.
-        - embedding: numpy array of shape (embedding_dim,) if precomputed. If None, a placeholder random vector is used.
+        - text: content to store.
+        - tags: list of strings for filtering.
+        - timestamp: ISO 8601 string; if None, current UTC time is used.
+        - embedding: np.array or list; if None, generate via API client.
         """
         if tags is None:
             tags = []
         if timestamp is None:
             timestamp = datetime.now(timezone.utc).isoformat()
+        # Generate or validate embedding
         if embedding is None:
-            embedding = np.random.random(self.embedding_dim).astype(np.float32)
-        mem_id = f"mem_{len(self.memories)+1:04d}"
+            emb = self.api_client.embed(text)
+        else:
+            emb = np.array(embedding, dtype=np.float32)
+        # Ensure correct dimension
+        if emb.shape[0] != self.embedding_dim:
+            print(f"🧨 Adjusting new memory embedding from {emb.shape[0]} to {self.embedding_dim}")
+            if emb.shape[0] > self.embedding_dim:
+                emb = emb[:self.embedding_dim]
+            else:
+                pad = np.zeros(self.embedding_dim - emb.shape[0], dtype=np.float32)
+                emb = np.concatenate([emb, pad])
 
+        mem_id = f"mem_{len(self.memories) + 1:04d}"
         self.memories.append({
             "id": mem_id,
             "text": text,
             "tags": tags,
             "timestamp": timestamp,
-            "embedding": embedding
+            "embedding": emb
         })
         self._save_memories()
         return mem_id
 
-    def search_memories(self, query_embeddings, top_k=5, tag_filter=None):
+    def search_memories(self, query_embedding, top_k=5, tag_filter=None):
         """
         Search memories by cosine similarity to the query_embedding.
-        - query_embedding: numpy array of shape (embedding_dim,).
-        - top_k: number of top results to return.
-        - tag_filter: list of tags; if provided, only memories containing any of these tags are considered.
         Returns list of (memory_dict, similarity_score).
         """
         if len(self.memories) == 0:
             return []
         candidates = self.memories
-
         if tag_filter is not None:
-            candidates = [mem for mem in self.memories if any(tag in mem["tags"] for tag in tag_filter)]
+            candidates = [mem for mem in candidates if any(tag in mem["tags"] for tag in tag_filter)]
             if not candidates:
                 return []
-
-        # Build a matrix... matrix? lets escape.
         emb_matrix = np.stack([mem["embedding"] for mem in candidates], axis=0)
-        #Normalice for cousin similitude
-        norms = np.linalg.norm(emb_matrix, axis=1, keepdims=True)
-        norms = np.maximum(norms, 1e-8)
-
-        emb_matrix = emb_matrix / np.linalg.norm(emb_matrix, axis=1, keepdims=True)
-        q_norm = query_embeddings / np.linalg.norm(query_embeddings)
-
-        sims = emb_matrix.dot(q_norm)
-
-        # Get top_k most relevant index
-        top_index = np.argsort(-sims)[:top_k]
-        results = [(candidates[i], float(sims[i])) for i in top_index]
-        return results
+        q_emb = np.array(query_embedding, dtype=np.float32)
+        if q_emb.shape[0] != self.embedding_dim:
+            print(f"🧨 Adjusting query embedding from {q_emb.shape[0]} to {self.embedding_dim}")
+            if q_emb.shape[0] > self.embedding_dim:
+                q_emb = q_emb[:self.embedding_dim]
+            else:
+                pad = np.zeros(self.embedding_dim - q_emb.shape[0], dtype=np.float32)
+                q_emb = np.concatenate([q_emb, pad])
+        emb_norm = emb_matrix / np.linalg.norm(emb_matrix, axis=1, keepdims=True)
+        q_norm = q_emb / np.linalg.norm(q_emb)
+        sims = emb_norm.dot(q_norm)
+        top_indices = np.argsort(-sims)[:top_k]
+        return [(candidates[i], float(sims[i])) for i in top_indices]
 
     def to_dataframe(self):
-        """
-        Return a pandas dataframe containing all memories. without the embedding column
-        """
         data = []
         for mem in self.memories:
             data.append({
@@ -125,13 +152,10 @@ class MemoryManager:
         try:
             query_emb = self.api_client.embed(text)
             results = self.search_memories(query_emb, top_k=top_k, tag_filter=tags)
-            filtered = [mem["text"] for mem, score in results if score >= min_similarity]
-            return filtered
+            return [mem["text"] for mem, score in results if score >= min_similarity]
         except Exception as e:
             print(f"❌ Memory retrieval error: {e}")
             return []
 
     def name(self):
         return "MemoryManager"
-
-
