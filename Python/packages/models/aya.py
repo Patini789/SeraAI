@@ -23,6 +23,10 @@ def bot_completion():
 def bot_end():
     return "<|END_OF_TURN_TOKEN|>"
 
+def memory(memories: list[str]) -> str:
+    return "\n".join(f"Relevant info: {m}" for m in memories)
+
+
 def bot(text):
     print(f"Aya Message read: {text}")
     return text

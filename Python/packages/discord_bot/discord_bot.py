@@ -12,13 +12,14 @@ intents.message_content = True
 
 
 class DiscordBot:
-    def __init__(self, shared_state: dict[str, Any], on_new_message_fn: Callable[[str], str]):
+    def __init__(self, shared_state: dict[str, Any], on_new_message_fn: Callable[[str, str], str]):
         self.shared_state = shared_state
         self.bot = commands.Bot(command_prefix='$', intents=intents)
         self.on_new_message_fn = on_new_message_fn
 
         # List of user IDs to notify
         self.ids_to_notify = shared_state.get("notify_user_ids", [])
+        self.user_ids = shared_state.get("user_ids", [])
 
         # List of channel IDs to notify
         self.channels_to_notify = shared_state.get("notify_channel_ids", [])
@@ -26,7 +27,6 @@ class DiscordBot:
         @self.bot.event
         async def on_ready():
             print(f'✅ Bot connected as {self.bot.user}')
-
             for user_id in self.ids_to_notify:
                 try:
                     user = await self.bot.fetch_user(user_id)
@@ -45,6 +45,14 @@ class DiscordBot:
                 except Exception as e:
                     print(f"Could not send message to channel {channel_id}: {e}")
 
+        async def send_custom_message(self, author, content):
+            if author in self.user_ids:
+                user_id = self.user_ids[author]
+                user = await self.bot.fetch_user(user_id)
+                await user.send(content)
+            else:
+                print(f"Incorrect author {author}")
+
         @self.bot.event
         async def on_message(message):
             if message.author == self.bot.user:
@@ -52,9 +60,8 @@ class DiscordBot:
 
             if message.content.startswith('$chat '):
                 content = message.content[len('$chat '):]
-                #loop = asyncio.get_running_loop()
 
-                answer = await asyncio.to_thread(self.on_new_message_fn, f"{message.author}: {content}")
+                answer = await asyncio.to_thread(self.on_new_message_fn, message.author, content)
 
                 if not answer:
                     await message.channel.send("An error occurred.")

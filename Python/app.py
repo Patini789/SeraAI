@@ -4,8 +4,8 @@ from copyreg import constructor
 
 from config.settings import settings
 from Python.io.reader import Reader
-from Python.io.writer import Writer
-from packages.memory.manager import MemoryManager
+from Python.io.APIClient import APIClient
+from packages.memory.memory_manager import MemoryManager
 from Python.packages.models import model_administrator
 from Python.packages.models.model_administrator import ModelAdministrator
 from Python.packages.discord_bot.discord_bot import DiscordBot
@@ -13,8 +13,6 @@ from Python.packages.discord_bot.discord_bot import DiscordBot
 
 class App:
     def __init__(self):
-        # Initialize memory manager
-        self.memory = MemoryManager(json_path=settings.memory_path)
 
         # Initialize model configuration
         self.max_tokens = settings.max_tokens
@@ -23,11 +21,15 @@ class App:
         self.model = model_config["model"]
         self.url = model_config["url"]
 
-        # Initialize writer
-        self.writer = Writer(
-            url=self.url,
-            model=self.model
+        # URL's & model's configuration
+        self.api_client = APIClient(
+            embedding_url=settings.embedding_url,
+            embedding_model=settings.embedding_model,
+            completion_url=settings.completion_url,
+            completion_model=settings.completion_model
         )
+        # Initialize memory manager
+        self.memory = MemoryManager(json_path=settings.memory_path, api_client=self.api_client)
 
         # Load prompt constructor module
         try:
@@ -47,6 +49,7 @@ class App:
             "max_tokens": self.max_tokens,
             "notify_user_ids": settings.notify_user_ids,
             "notify_channel_ids": settings.notify_channel_ids,
+            "user_ids": settings.user_ids,
         }
 
         # Register services (reader, bots, etc.)
@@ -65,21 +68,57 @@ class App:
         self.instructions = self.constructor_module.system(settings.instructions)
         self.conversation_history = [self.instructions]
 
-    def handle_new_message(self, item: str) -> str:
+    def handle_new_message(self, author: str, item: str) -> str:
         """Handle a new user message and return the model response."""
 
-        # Format user message
-        user_msg = self.constructor_module.user(item)
+        # Step 1: Format user message
+        user_msg = self.constructor_module.user(f"{author}: " + f"{item}")
         self.conversation_history.append(user_msg)
 
-        # Build prompt
+        # Step 2: Retrieve relevant memories
+        author_tag = author
+        user_memories = self.memory.retrieve(user_msg, top_k=3, min_similarity=0.70, tags=[author_tag])
+
+        global_memories = self.memory.retrieve(item, top_k=2, min_similarity=0.70, tags=["global"])
+
+        sera_memories = self.memory.retrieve(item, top_k=3, min_similarity=0.70, tags=["Sera"])
+
+        combined_memories = list(dict.fromkeys(user_memories + global_memories + sera_memories))
+
+
+        print(f"Relevant memories ({len(combined_memories)}):")
+        for rec in combined_memories:
+            print(rec)
+
+        if combined_memories:
+            formatted_memory = self.constructor_module.memory(combined_memories)
+        else:
+            formatted_memory = ""
+            print("No memories.")
+
+        # Step 3: Construct prompt
         completion_marker = self.constructor_module.bot_completion()
-        full_prompt = "\n".join(self.conversation_history) + completion_marker
+        full_prompt = (
+                self.instructions +
+                "\n" + formatted_memory +
+                "\n" + "\n".join(self.conversation_history) +
+                completion_marker
+        )
 
-        # Generate model response
-        response = self.writer.send(full_prompt)
+        # ✅ DEBUG: Mostrar prompt final que verá la IA
+        print("📝 PROMPT Send:\n" + "-" * 50)
+        print(full_prompt)
+        print("-" * 50)
 
-        # Add bot response to conversation history
+        # Step 4: Get completion
+        response = self.api_client.complete(
+            full_prompt,
+            max_tokens=self.max_tokens,
+            temperature=0.3,
+            top_p=0.4
+        )
+
+        # Step 5: Append and return
         bot_response = completion_marker + response + self.constructor_module.bot_end() + "\n"
         self.conversation_history.append(bot_response)
 

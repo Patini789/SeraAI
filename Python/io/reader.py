@@ -56,14 +56,18 @@ class Reader:
             updated = False
 
             for item in data:
-                if item.get("User") != "":
+                user = item.get("User", "")
+                message = item.get("Message", "")
+
+                if user != "":
                     self._log("Sending conversation...")
                     self._log(item)
-                    item["User"] = ""
+                    item["User"] = ""  # Todo Make the user custom, can be in godot or check for users in message
+
                     try:
-                        self.on_new_message_fn(item)
+                        self.on_new_message_fn("User", message)
                     except Exception as e:
-                        self._log(f"Error in on_new_message_fn {e}")
+                        self._log(f"Error in on_new_message_fn: {e}")
                     updated = True
                 else:
                     updated_data.append(item)
