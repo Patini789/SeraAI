@@ -13,14 +13,16 @@ Sera is not an AI by itself — it's a system that connects to AI models and han
 2. Go to the env/ folder and rename the files, removing user. and .txt if present. Then fill in the fields using the examples:
 
     user.env.txt -> .env
+   
     user.modelAPI.json -> modelAPI.json
+   
     user.notify.json -> notify.json
 
-3. Do the same in the memory/ folder:
+4. Do the same in the memory/ folder:
   
     user.memories.json -> memories.json
 
- 4. Make sure you have a local server running that supports both embeddings and completion models.
+ 5. Make sure you have a local server running that supports both embeddings and completion models.
   
 ## Ready to Go
 Feel free to use or tweak the project however you like — just credit it appropriately.
