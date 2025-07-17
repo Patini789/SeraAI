@@ -1,0 +1,11 @@
+{
+  "model": {
+    "api": "phi",
+    "model": "",
+    "url": ""
+  },
+  "embedding": {
+    "model":"",
+    "url": ""
+  }
+}

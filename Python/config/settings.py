@@ -28,11 +28,11 @@ class Settings:
         if notify_json.exists():
             with open(notify_json, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                self.notify_user_ids = list(data.get("usuarios", {}).get("active", {}).values())
-                self.notify_channel_ids = list(data.get("canales", {}).get("active", {}).values())
-                self.user_ids = data.get("usuarios", {})
+                self.notify_user_ids = list(data.get("users", {}).get("active", {}).values())
+                self.notify_channel_ids = list(data.get("channels", {}).get("active", {}).values())
+                self.user_ids = data.get("users", {}) # for send messages
 
-        get_api_path = base / "env" / "personal.json"
+        get_api_path = base / "env" / "modelAPI.json"
         with open(get_api_path, "r", encoding="utf-8") as f:
             data = json.load(f)
             self.get_api = data
