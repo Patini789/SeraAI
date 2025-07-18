@@ -78,7 +78,7 @@ class MemoryManager:
         - text: content to store.
         - tags: list of strings for filtering.
         - timestamp: ISO 8601 string; if None, current UTC time is used.
-        - embedding: np.array or list; if None, generate via API client.
+        - embedding: np. array or list; if None, generate via API client.
         """
         if tags is None:
             tags = []
@@ -148,14 +148,39 @@ class MemoryManager:
             })
         return pd.DataFrame(data)
 
-    def retrieve(self, text: str, top_k: int = 5, min_similarity: float = 0.8, tags: list[str] = None) -> list[str]:
+    def retrieve(self, text: str, top_k: int = 5, min_similarity: float = 0.8, tags: list[str] = None) -> list[dict]:
         try:
             query_emb = self.api_client.embed(text)
             results = self.search_memories(query_emb, top_k=top_k, tag_filter=tags)
-            return [mem["text"] for mem, score in results if score >= min_similarity]
+
+            enriched = []
+            for mem, score in results:
+                if score >= min_similarity:
+                    days = self._days_since(mem["timestamp"])
+                    enriched.append({
+                        "text": mem["text"],
+                        "days_ago": days,
+                        "score": score,
+                        "id": mem["id"]
+                    })
+            return enriched
         except Exception as e:
             print(f"❌ Memory retrieval error: {e}")
             return []
+
+    def deduplicate_memories(self, memories: list[dict]) -> list[dict]:
+        seen_ids = set()
+        deduped = []
+        for mem in memories:
+            if mem["id"] not in seen_ids:
+                deduped.append(mem)
+                seen_ids.add(mem["id"])
+        return deduped
+
+    def _days_since(self, timestamp: str) -> int:
+        memory_time = datetime.fromisoformat(timestamp)
+        now = datetime.now(memory_time.tzinfo)
+        return (now - memory_time).days
 
     def name(self):
         return "MemoryManager"

@@ -2,6 +2,7 @@
 #import importlib.util
 #from copyreg import constructor
 
+from datetime import datetime
 import threading
 import asyncio
 import json
@@ -79,8 +80,10 @@ class App:
 
         # Initialize conversation prompt
         self.instructions = self.constructor_module.system(settings.instructions)
-        self.conversation_history = [self.instructions]
+        self.conversation_history = []
         self.raw_conversation_log = []
+        self.temporary_memories = []
+        self.memory_lifetime = 4
 
     def handle_new_message(self, author: str, message: str) -> str:
         """Handle a new user message and return the model's response."""
@@ -94,20 +97,30 @@ class App:
 
         # Step 2: Retrieve relevant memories
         author_tag = author
-        user_memories = self.memory.retrieve(user_msg, top_k=3, min_similarity=0.70, tags=[author_tag])
+        new_user_memories = self.memory.retrieve(user_msg, top_k=3, min_similarity=0.70, tags=[author_tag])
+        new_global_memories = self.memory.retrieve(message, top_k=2, min_similarity=0.70, tags=["global"])
+        new_sera_memories = self.memory.retrieve(message, top_k=3, min_similarity=0.70, tags=["Sera"])
 
-        global_memories = self.memory.retrieve(message, top_k=2, min_similarity=0.70, tags=["global"])
+        new_memories = new_user_memories + new_global_memories + new_sera_memories
 
-        sera_memories = self.memory.retrieve(message, top_k=3, min_similarity=0.70, tags=["Sera"])
+        for mem in new_memories:
+            if mem not in [m["memory"] for m in self.temporary_memories]:
+                self.temporary_memories.append({"memory": mem, "turns_left": self.memory_lifetime})
 
-        combined_memories = list(dict.fromkeys(user_memories + global_memories + sera_memories))
+        self.temporary_memories = [
+            {"memory": m["memory"], "turns_left": m["turns_left"] - 1}
+            for m in self.temporary_memories if m["turns_left"] > 1
+        ]
 
-        print(f"Relevant memories ({len(combined_memories)}):")
-        for memory_item in combined_memories:
-            print(memory_item)
+        combined_memories = self.memory.deduplicate_memories([m["memory"] for m in self.temporary_memories])
+
+        print(f"🧠 Relevant memories with lifetime ({len(self.temporary_memories)}):")
+        for m in self.temporary_memories:
+            print(f"({m['turns_left']} turns left) [{m['memory']['days_ago']} días atrás] {m['memory']['text']}")
 
         if combined_memories:
-            formatted_memory = self.constructor_module.memory(combined_memories)
+            memory_lines = [f"[{mem['days_ago']} días atrás] {mem['text']}" for mem in combined_memories]
+            formatted_memory = self.constructor_module.memory(memory_lines)
         else:
             formatted_memory = ""
             print("No memories found.")
@@ -116,7 +129,7 @@ class App:
         completion_marker = self.constructor_module.bot_completion()
         full_prompt = (
             self.instructions +
-            "\n" + formatted_memory +
+            "\n" + self.constructor_module.system(formatted_memory) +
             "\n" + "\n".join(self.conversation_history) +
             completion_marker
         )
@@ -202,6 +215,7 @@ class App:
                 return
 
             self.memory.add_memory(summary_text, tags=tags)
+            self.raw_conversation_log = []
             print("💾 Memory saved successfully.")
 
         except json.JSONDecodeError as e:
