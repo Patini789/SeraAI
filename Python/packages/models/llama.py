@@ -1,45 +1,41 @@
-"""aya"""
+"""Llama"""
 
 def system(text):
-    text = (
-        f"<|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|> {text}\n"
-        f"<|END_OF_TURN_TOKEN|>"
-    )
-    return text
+    return f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n{text}<|eot_id|>"
 
 def user(text):
-    text = (
-        f"<|START_OF_TURN_TOKEN|><|USER_TOKEN|> {text}\n"
-        "<|END_OF_TURN_TOKEN|>"
-
-    )
-    return text
+    return f"<|start_header_id|>user<|end_header_id|>\n{text}<|eot_id|>"
 
 def bot_completion():
-    return "<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>\n"
+    return "<|start_header_id|>assistant<|end_header_id|>\n"
 
 def bot_end():
-    return "<|END_OF_TURN_TOKEN|>"
+    return "<|eot_id|>\n"
 
 def memory(memories: list[str]) -> str:
     return "\n".join(f"Relevant info: {m}" for m in memories)
 
+def translator_to_english(message: str) -> str:
+    return f"<|start|>developer<|message|>\nTranslate this text to english do not add nothing more just your answer, the person how is normally refered ys Sera, if you see take like a name<|end|><|start|>user<|message|>\n{message}<|end|>"
+
+def translator_to_spanish(message: str) -> str:
+    return f"<|start|>developer<|message|>\nTraduce este texto al español no añadas más que la respuesta<|end|><|start|>user<|message|>\n{message}<|end|>"
+
 def bot(text):
     return text
-
-def clean_answer(text: str) -> str:
-    return text 
+def clean_answer(mensaje_ia: str) -> str:
+    return mensaje_ia
 
 def memory_summarizer_prompt(text: str) -> str:
     return f'''
-<|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|> 
+<|im_start|>system<|im_sep|>
 You are a memory evaluator. Respond only with strict JSON. Use this format:
 
 The required format is:
 
 {{
   "recuerdo": true or false (boolean),
-  "text": "Clear and brief summary as if explaining it to Sera. Use one or two sentences. Correctly attribute who said what, using EXACT names AS THEY APPEAR (e.g., 'user' or 'Sera'). Example: 'Juan said programming is like weaving spells'. If Sera responded or intervened meaningfully, clarify it as well.",
+  "text": "Clear and brief summary as if explaining it to Sera. Use one or two sentences. Correctly attribute who said what, using EXACT names AS THEY APPEAR (e.g., 'user' or 'Sera'). Example: 'Juan said programming is like weaving spells'. If Sera responded or intervened meaningfully, clarify it as well. In the language of the conversation",
   "tags": ["nickname"] ← Use exactly **one name**, the most relevant author. It can be a user, 'Sera', or 'global' if universally applicable.
   "reasoning": "Why is this worth remembering? One sentence."- If Sera speaks alone, save only if content reveals clear emotional depth, opinion, or impacts the conversation in a meaningful way.
 
@@ -69,10 +65,11 @@ If the message is trivial or lacks memorable substance, reply:
 }}
 
 NEVER assume clever wording is enough. It must reveal or alter something significant.
-<|END_OF_TURN_TOKEN|>
-<|START_OF_TURN_TOKEN|><|USER_TOKEN|>
+
+<|im_end|>
+<|im_start|>user<|im_sep|>
 Content to analyze:
 \"\"\"{text}\"\"\"
-<|END_OF_TURN_TOKEN|>
-<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>
+<|im_end|>
+<|im_start|>assistant<|im_sep|>
 '''

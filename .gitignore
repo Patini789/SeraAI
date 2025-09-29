@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+Godot/
+
+Python/env/*
+!Python/env/user..env.txt
+!Python/env/user.modelAPI.json
+!Python/env/user.notify.json
+!Python/env/user.bot_config.py
+!Python/env/user.user_context.json
+
+Python/packages/memory/*
+!Python/packages/memory/memory_manager.py
+!Python/packages/memory/user.memories.json

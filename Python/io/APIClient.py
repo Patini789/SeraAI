@@ -2,7 +2,7 @@
 #api_client.py
 Send a prompt to the model host and return the response.
 """
-
+from openai import OpenAI
 import requests
 import numpy as np
 
@@ -14,6 +14,7 @@ class APIClient:
         self.embed_model = embedding_model
         self.complete_url = completion_url
         self.complete_model = completion_model
+        self.complete_client = OpenAI(base_url=completion_url, api_key=completion_model)
 
     def embed(self, text: str):
         payload = {"input": text, "model": self.embed_model}
@@ -24,7 +25,22 @@ class APIClient:
 
     def complete(self, prompt: str, **kwargs) -> str:
         payload = {"model": self.complete_model, "prompt": prompt, **kwargs}
-        resp = requests.post(self.complete_url, json=payload, timeout=400)
+        resp = requests.post(self.complete_url, json=payload, timeout=2400)
         resp.raise_for_status()
         choices = resp.json().get("choices", [])
         return choices[0]["text"].strip() if choices else ""
+
+    def openAI_complete(self, prompt: str, **kwargs) -> str: #future use
+        response = self.complete_client.chat.completions.create(
+            model=self.complete_model,
+            messages=[{"role": "system", "content": ""}, #todo
+                      {"role": "user", "content": prompt}],
+            stream=True,
+            **kwargs
+        )
+
+        full_text = ""
+        for chunk in response:
+            if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                full_text += chunk.choices[0].delta.content
+        return full_text.strip()
