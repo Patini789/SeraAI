@@ -207,7 +207,7 @@ class App:
         # This way we can change the system without changing the message format
         # Also we can have different systems for different models also for models with tools can be different, should make two logics?
         date_hour = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        dia_es = self.SchedulesManager.dia_hoy()
+        dia_es = self.SchedulesManager.get_today_day_name()
 
         system_prompt_text = (
         f"Day and hour: {date_hour}. "
@@ -304,8 +304,10 @@ class App:
         else:
             extra_context_lines = []
 
-        new_memories = user_memories + global_memories + sera_memories
-
+        try:
+            new_memories = user_memories + global_memories + sera_memories
+        except UnboundLocalError:
+            new_memories = []
         for mem in new_memories:
             if mem not in [m["memory"] for m in self.temporary_memories]:
                 self.temporary_memories.append({"memory": mem, "turns_left": self.memory_lifetime})

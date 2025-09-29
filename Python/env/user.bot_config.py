@@ -14,7 +14,7 @@ bot_settings = {
 "IMAGE_VISION": False, # Image Vision
 "CREATE_MEMORIES": False, # if you want the bot to create memories from the conversation
 "USE_MEMORIES": True, # if you want the bot to use memories from the conversation
-"TRANSLATE_ENABLE": True, # improves de cuality in small models but add latency (a lot of)
+"TRANSLATE_ENABLE": False, # improves de cuality in small models but add latency (a lot of)
 # Voice
 "VOICE":'es-HN-KarlaNeural',
 "RATE":"+10%",
